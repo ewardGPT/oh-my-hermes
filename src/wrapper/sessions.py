@@ -35,6 +35,7 @@ from ..runtime.artifacts import (
     summarize_runtime_observation_status,
     validate_runtime_observations_for_wrapper_session,
 )
+from ..coding.handoff_envelope import build_handoff_envelope
 from .contract import (
     CHAT_RESPONSE_SCHEMA_VERSION,
     INTERACTION_MODES,
@@ -839,6 +840,15 @@ def _prepare_prompt_only_session_handoff(
                 "run_created": False,
                 "reason": "prompt_only_handoff_is_not_lifecycle_backed",
             },
+            "envelope": build_handoff_envelope(
+                message,
+                decisions=["plan accepted", f"executor selected: {executor_target}"],
+                assumptions=["prompt-only executor remains outside lifecycle-backed runtime"],
+                evidence=["prompt handoff validated", "session state persisted"],
+                risks=["execution result is not yet observed"],
+                next_action="dispatch_to_executor",
+                stop_conditions=["cancelled by operator", "handoff validation fails"],
+            ),
         },
         "replayed": replayed,
     }
@@ -949,7 +959,7 @@ def _prepare_runtime_session_handoff(
         "schema_version": WRAPPER_SESSION_RESULT_SCHEMA_VERSION,
         "session": session,
         "status": build_wrapper_session_status(paths, session_id),
-        "handoff": _runtime_session_handoff_envelope(runtime_handoff),
+        "handoff": _runtime_session_handoff_envelope(runtime_handoff, objective=message),
         "replayed": replayed,
     }
     if include_message and "runtime_handoff_prompt" in payload:
@@ -957,7 +967,8 @@ def _prepare_runtime_session_handoff(
     return result
 
 
-def _runtime_session_handoff_envelope(runtime_handoff: object) -> dict[str, object]:
+def _runtime_session_handoff_envelope(runtime_handoff: object, *, objective: str = "") -> dict[str, object]:
+    objective = objective or "resumed runtime handoff"
     return {
         "schema_version": "runtime_session_handoff/v1",
         "runtime_handoff": runtime_handoff if isinstance(runtime_handoff, dict) else {},
@@ -965,6 +976,15 @@ def _runtime_session_handoff_envelope(runtime_handoff: object) -> dict[str, obje
             "run_created": False,
             "reason": "runtime_handoff_is_not_lifecycle_backed",
         },
+        "envelope": build_handoff_envelope(
+            objective,
+            decisions=["plan accepted", "runtime executor selected"],
+            assumptions=["runtime handoff is not lifecycle-backed until dispatch"],
+            evidence=["runtime handoff validated", "session state persisted"],
+            risks=["execution result is not yet observed"],
+            next_action="dispatch_to_executor",
+            stop_conditions=["cancelled by operator", "handoff validation fails"],
+        ),
     }
 
 
