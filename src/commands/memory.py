@@ -55,6 +55,10 @@ from ..memory import (
 )
 from ..system.local_store import read_json_object_result
 from ..workflows.memory_evaluation import run_memory_evaluation
+from ..workflows.retrieval_resume_evaluation import (
+    default_retrieval_resume_cases,
+    run_retrieval_resume_evaluation,
+)
 from ..workflows.memory_lifecycle import (
     apply_memory_correction,
     apply_memory_prune,
@@ -482,6 +486,19 @@ def cmd_memory_evaluate(args: argparse.Namespace) -> int:
             output.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
     except (OSError, ValueError) as exc:
         raise OmhError(str(exc)) from exc
+    _print_json(payload)
+    return 0
+
+
+def cmd_memory_evaluate_retrieval(args: argparse.Namespace) -> int:
+    payload = run_retrieval_resume_evaluation(default_retrieval_resume_cases())
+    if args.output:
+        output = Path(args.output).expanduser()
+        try:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+        except OSError as exc:
+            raise OmhError(str(exc)) from exc
     _print_json(payload)
     return 0
 

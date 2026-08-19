@@ -234,6 +234,13 @@ def add_memory_commands(sub: argparse._SubParsersAction[argparse.ArgumentParser]
     evaluate.add_argument("--output", default=None, help="Write the exact JSON evidence object to this path.")
     evaluate.set_defaults(func=memory.cmd_memory_evaluate)
 
+    evaluate_retrieval = memory_sub.add_parser(
+        "evaluate-retrieval",
+        help="Run the deterministic retrieval, stale-source, resume, and token-budget smoke evaluation.",
+    )
+    evaluate_retrieval.add_argument("--output", default=None, help="Write the exact JSON evidence object to this path.")
+    evaluate_retrieval.set_defaults(func=memory.cmd_memory_evaluate_retrieval)
+
     blocks = memory_sub.add_parser("blocks", help="List OMH memory blocks by label, without their values.")
     blocks.add_argument("--tier", choices=("system", "reference"), default=None, help="Limit the listing to one tier.")
     blocks.set_defaults(func=memory.cmd_memory_blocks)
