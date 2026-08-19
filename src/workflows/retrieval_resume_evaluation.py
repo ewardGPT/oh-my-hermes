@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
+from typing import cast
 
 
 RETRIEVAL_RESUME_EVALUATION_SCHEMA_VERSION = "retrieval_resume_evaluation/v1"
@@ -65,9 +66,11 @@ def evaluate_recall_pack(
     records = included if isinstance(included, Sequence) and not isinstance(included, (str, bytes)) else []
     selected = [str(item.get("record_id", "")) for item in records if isinstance(item, Mapping)]
     token_count = sum(max(1, len(str(item.get("summary", ""))) // 4) for item in records if isinstance(item, Mapping))
+    task_ref = pack.get("task_ref")
+    task_ref_mapping = task_ref if isinstance(task_ref, Mapping) else {}
     return _evaluate_case(
         {
-            "case_id": str(pack.get("task_ref", {}).get("sha256", "recall") if isinstance(pack.get("task_ref"), Mapping) else "recall"),
+            "case_id": str(task_ref_mapping.get("sha256", "recall")),
             "expected_source": expected_source,
             "selected_sources": selected,
             "stale_sources": list(stale_source_ids),
@@ -83,7 +86,7 @@ def _evaluate_case(case: Mapping[str, object]) -> dict[str, object]:
     expected_source = _safe_id(case.get("expected_source"))
     selected_sources = [_safe_id(value) for value in _strings(case.get("selected_sources"))]
     stale_sources = set(_safe_id(value) for value in _strings(case.get("stale_sources")))
-    resume = case.get("resume_state") if isinstance(case.get("resume_state"), Mapping) else {}
+    resume = cast(Mapping[str, object], case.get("resume_state")) if isinstance(case.get("resume_state"), Mapping) else {}
     token_count = _non_negative_int(case.get("token_count"))
     token_budget = _non_negative_int(case.get("token_budget"))
     gates = {

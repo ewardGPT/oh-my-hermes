@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Final, Mapping
+from typing import Final, Mapping, cast
 
 
 TOOL_POLICY_SCHEMA_VERSION: Final = "tool_policy/v1"
@@ -92,7 +92,8 @@ def decide_tool_call(policy: Mapping[str, object], *, authority_granted: bool = 
     errors = validate_tool_policy(policy)
     if errors:
         return {"schema_version": "tool_decision/v1", "action": "block", "reason": "invalid_policy", "errors": errors}
-    if int(policy["budget_units"]) > budget_remaining:
+    budget_units = cast(int, policy["budget_units"])
+    if budget_units > budget_remaining:
         reason = "budget_exceeded"
     elif policy["authority_scope"] != "none" and not authority_granted:
         reason = "authority_required"
@@ -103,5 +104,5 @@ def decide_tool_call(policy: Mapping[str, object], *, authority_granted: bool = 
     elif attempt > 1 and policy["retry_mode"] == "idempotent_only" and not bool(policy["idempotent"]):
         reason = "retry_not_idempotent"
     else:
-        return {"schema_version": "tool_decision/v1", "action": "allow", "reason": "policy_satisfied", "budget_units": int(policy["budget_units"])}
-    return {"schema_version": "tool_decision/v1", "action": "block", "reason": reason, "budget_units": int(policy["budget_units"])}
+        return {"schema_version": "tool_decision/v1", "action": "allow", "reason": "policy_satisfied", "budget_units": budget_units}
+    return {"schema_version": "tool_decision/v1", "action": "block", "reason": reason, "budget_units": budget_units}

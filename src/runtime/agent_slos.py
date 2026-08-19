@@ -46,14 +46,17 @@ def _boolean_ratio(records: list[Mapping[str, object]], key: str) -> dict[str, o
 
 
 def _average(records: list[Mapping[str, object]], key: str) -> dict[str, object]:
-    values = [record[key] for record in records if isinstance(record.get(key), (int, float)) and not isinstance(record.get(key), bool)]
+    values = [value for record in records if isinstance((value := record.get(key)), (int, float)) and not isinstance(value, bool)]
     if not values:
         return {"state": "unknown", "value": None, "reason": "no_observed_metric"}
-    return {"state": "observed", "value": sum(values) / len(values), "reason": ""}
+    numeric_values = [float(value) for value in values]
+    return {"state": "observed", "value": sum(numeric_values) / len(numeric_values), "reason": ""}
 
 
 def _threshold(metric: Mapping[str, object], limit: float, *, lower: bool) -> str:
     if metric.get("state") != "observed":
         return "unknown"
-    value = float(metric["value"])
+    value = metric.get("value")
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return "unknown"
     return "within" if (value <= limit if lower else value >= limit) else "breached"

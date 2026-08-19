@@ -48,7 +48,8 @@ def validate_context_governor(decision: Mapping[str, object] | object) -> list[s
         errors.append("schema_version is invalid")
     if decision.get("reason") not in REASONS:
         errors.append("reason is invalid")
-    if not isinstance(decision.get("actions"), list) or not all(isinstance(item, str) for item in decision.get("actions", [])):
+    actions = decision.get("actions")
+    if not isinstance(actions, list) or not all(isinstance(item, str) for item in actions):
         errors.append("actions must be a string list")
     if "not" not in str(decision.get("claim_boundary", "")).casefold():
         errors.append("claim_boundary must state a limitation")
