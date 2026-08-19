@@ -9,6 +9,7 @@ logs, or summaries; only the explicit scalar allowlist below can reach output.
 from __future__ import annotations
 
 import math
+import hashlib
 from dataclasses import dataclass
 from typing import Final, Mapping, Sequence
 
@@ -57,6 +58,7 @@ _STATUS_ALIASES: Final[dict[str, str]] = {
 }
 
 _ID_FIELDS: Final[tuple[str, ...]] = (
+    "correlation_id",
     "parent_session_id",
     "child_session_id",
     "run_id",
@@ -206,6 +208,7 @@ def build_routing_observation(
             field="dispatch_id",
         ),
     }
+    correlation_id = _correlation_id(ids)
 
     runtime_metrics = _observed_metrics(observed_session)
     child_metrics = _observed_metrics(child_usage)
@@ -228,6 +231,7 @@ def build_routing_observation(
         "schema_version": ROUTING_OBSERVATION_SCHEMA_VERSION,
         "claim": "observed" if observed else "prepared",
         "status": status,
+        "correlation_id": correlation_id,
         **ids,
         "category": category or None,
         "lane": _first_safe(route, ("lane", "domain", "requested_domain"), field="lane"),
@@ -412,6 +416,26 @@ def _observation_record(
     ):
         return value.record, True
     return (value, False) if isinstance(value, Mapping) else ({}, False)
+
+
+def _correlation_id(ids: Mapping[str, object]) -> str | None:
+    """Return a stable join key without persisting task content.
+
+    Prefer the highest-level identity available. Hashing keeps provider/session
+    identifiers out of surfaces that only need a cross-record join key while
+    preserving deterministic aggregation across prepared and observed events.
+    """
+    identity = next(
+        (
+            str(ids.get(field, "")).strip()
+            for field in ("parent_session_id", "run_id", "dispatch_id", "child_session_id")
+            if str(ids.get(field, "")).strip()
+        ),
+        "",
+    )
+    if not identity:
+        return None
+    return "corr-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
 
 
 def _hermes_child(record: Mapping[str, object], task_index: int) -> Mapping[str, object]:
