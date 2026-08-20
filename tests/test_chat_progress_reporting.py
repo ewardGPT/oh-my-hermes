@@ -17,6 +17,7 @@ from omh.wrapper_sessions import (
     record_plan_decision,
     select_wrapper_session_executor,
 )
+from omh.runtime.checkpoints import read_checkpoint
 
 
 class ChatProgressReportingTests(unittest.TestCase):
@@ -29,6 +30,10 @@ class ChatProgressReportingTests(unittest.TestCase):
             record_plan_decision(paths, session_id, "accept")
             select_wrapper_session_executor(paths, session_id, "codex")
             prepared = prepare_wrapper_session_handoff(paths, session_id, message)
+            run_id = str(prepared["session"]["current_run_id"])
+            checkpoint = read_checkpoint(paths.runtime_runs_dir / run_id)
+            self.assertEqual(checkpoint["phase"], "handoff_prepared")
+            self.assertEqual(checkpoint["next_action"], "dispatch_to_executor")
 
             opened = open_executor_session(
                 paths,
@@ -49,6 +54,8 @@ class ChatProgressReportingTests(unittest.TestCase):
             )
 
             status = opened["status"]
+            checkpoint = read_checkpoint(paths.runtime_runs_dir / run_id)
+            self.assertEqual(checkpoint["phase"], "executor_dispatched")
             self.assertEqual(prepared["status"]["executor_session_status"]["result"], "not_observed")
             self.assertEqual(status["result"], "not_observed")
             self.assertEqual(status["verification"], "not_requested")
@@ -64,7 +71,7 @@ class ChatProgressReportingTests(unittest.TestCase):
             session_id = str(started["session"]["session_id"])
             record_plan_decision(paths, session_id, "accept")
             select_wrapper_session_executor(paths, session_id, "codex")
-            prepare_wrapper_session_handoff(paths, session_id, message)
+            prepared = prepare_wrapper_session_handoff(paths, session_id, message)
             open_executor_session(
                 paths,
                 session_id,
@@ -89,6 +96,10 @@ class ChatProgressReportingTests(unittest.TestCase):
                     evidence_refs=["codex-final-jsonl"],
                 ),
             )
+            run_id = str(prepared["session"]["current_run_id"])
+            checkpoint = read_checkpoint(paths.runtime_runs_dir / run_id)
+            self.assertEqual(checkpoint["phase"], "executor_result")
+            self.assertEqual(checkpoint["state"]["result"], "completed")
             self.assertEqual(completed["status"]["result"], "completed")
             self.assertEqual(completed["status"]["executor_progress"]["state"], "closed")
             self.assertEqual(completed["status"]["executor_progress"]["latest_event"]["event_type"], "executor_completed")

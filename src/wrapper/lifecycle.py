@@ -23,6 +23,7 @@ from ..runtime.artifacts import (
     write_delegation,
     write_wrapper_contract,
 )
+from ..runtime.checkpoints import save_checkpoint
 from ..runtime.records import OBSERVED_RESULTS
 
 
@@ -31,6 +32,26 @@ LIFECYCLE_SCHEMA_VERSION = "coding_lifecycle/v1"
 
 class CodingLifecycleError(ValueError):
     pass
+
+
+def _checkpoint_lifecycle(
+    paths: OmhPaths,
+    run_id: str,
+    *,
+    phase: str,
+    next_action: str,
+    state: dict[str, object],
+    status: str = "ready",
+) -> dict[str, object]:
+    checkpoint = save_checkpoint(
+        paths.runtime_runs_dir / run_id,
+        phase=phase,
+        state=state,
+        next_action=next_action,
+        idempotency_key=f"lifecycle:{run_id}:{phase}:{state.get('result', '')}",
+        status=status,
+    )
+    return checkpoint
 
 
 def start_codex_delegation_lifecycle(
@@ -85,6 +106,16 @@ def start_codex_delegation_lifecycle(
         coding_delegation_record_payload(payload, message, source_metadata=source_metadata),
     )
     status = report_codex_delegation_lifecycle(paths, str(run["run_id"]))
+    _checkpoint_lifecycle(
+        paths,
+        str(run["run_id"]),
+        phase="handoff_prepared",
+        next_action=str(status.get("next_action", "dispatch_to_executor")),
+        state={
+            "workflow": str(delegation["recommended_workflow"]),
+            "harness": str(delegation["recommended_harness"]),
+        },
+    )
     result: dict[str, object] = {
         "schema_version": LIFECYCLE_SCHEMA_VERSION,
         "run": run,
@@ -119,10 +150,18 @@ def record_codex_dispatch(paths: OmhPaths, run_id: str) -> dict[str, object]:
         event_type="executor_dispatched",
         summary="Codex dispatch was observed; no executor result is recorded yet.",
     )
+    lifecycle_status = report_codex_delegation_lifecycle(paths, run_id)
+    _checkpoint_lifecycle(
+        paths,
+        run_id,
+        phase="executor_dispatched",
+        next_action=str(lifecycle_status.get("next_action", "wait_for_executor_evidence")),
+        state={"event": "executor_dispatched"},
+    )
     return {
         "schema_version": LIFECYCLE_SCHEMA_VERSION,
         "wrapper": wrapper,
-        "status": report_codex_delegation_lifecycle(paths, run_id),
+        "status": lifecycle_status,
     }
 
 
@@ -157,10 +196,19 @@ def record_codex_result(
         summary=f"Codex result was recorded as {result}.",
         evidence_refs=list(evidence_refs or []),
     )
+    lifecycle_status = report_codex_delegation_lifecycle(paths, run_id)
+    _checkpoint_lifecycle(
+        paths,
+        run_id,
+        phase="executor_result",
+        next_action=str(lifecycle_status.get("next_action", "record_verification_evidence")),
+        state={"result": result},
+        status="blocked" if result in {"blocked", "failed"} else "ready",
+    )
     return {
         "schema_version": LIFECYCLE_SCHEMA_VERSION,
         "delegation": delegation,
-        "status": report_codex_delegation_lifecycle(paths, run_id),
+        "status": lifecycle_status,
     }
 
 
@@ -190,10 +238,18 @@ def record_codex_verification(
             "unobserved_gaps": unobserved_gaps,
         },
     )
+    lifecycle_status = report_codex_delegation_lifecycle(paths, run_id)
+    _checkpoint_lifecycle(
+        paths,
+        run_id,
+        phase="verification",
+        next_action=str(lifecycle_status.get("next_action", "report_completion_with_evidence")),
+        state={"completion_status": completion_status, "gap_count": len(unobserved_gaps)},
+    )
     return {
         "schema_version": LIFECYCLE_SCHEMA_VERSION,
         "wrapper": wrapper,
-        "status": report_codex_delegation_lifecycle(paths, run_id),
+        "status": lifecycle_status,
     }
 
 

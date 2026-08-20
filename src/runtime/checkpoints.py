@@ -66,7 +66,12 @@ def save_checkpoint(
     def mutate(current: dict[str, Any]) -> dict[str, Any]:
         existing = current.get("checkpoint")
         if isinstance(existing, dict) and existing.get("idempotency_key") == idempotency_key:
-            if existing.get("state_digest") != state_digest or existing.get("phase") != phase:
+            if (
+                existing.get("state_digest") != state_digest
+                or existing.get("phase") != phase
+                or existing.get("next_action") != next_action
+                or existing.get("status") != status
+            ):
                 raise CheckpointConflict("checkpoint idempotency key was reused for different state")
             return current
         sequence = int(existing.get("sequence", 0)) + 1 if isinstance(existing, dict) else 1
