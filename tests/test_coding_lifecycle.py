@@ -184,6 +184,8 @@ class CodingLifecycleTests(unittest.TestCase):
             self.assertEqual(payload["schema_version"], "coding_lifecycle/v1")
             self.assertEqual(payload["status"]["lifecycle_status"], "prepared")
             self.assertEqual(payload["status"]["next_action"], "dispatch_to_executor")
+            self.assertEqual(payload["status"]["recovery"]["status"], "resumable")
+            self.assertEqual(payload["status"]["recovery"]["next_action"], "dispatch_to_executor")
             self.assertEqual(record["executor_handoff"]["executor_target"], "codex")
             strategy = record["executor_handoff"]["executor_local_capability_strategy"]
             self.assertEqual(strategy["schema_version"], "executor_local_capability_strategy/v1")
@@ -220,6 +222,8 @@ class CodingLifecycleTests(unittest.TestCase):
             self.assertTrue(payload["wrapper"]["prompt_dispatched"])
             self.assertEqual(payload["status"]["next_action"], "wait_for_executor_evidence")
             self.assertEqual(payload["status"]["lifecycle_status"], "dispatched")
+            self.assertEqual(payload["status"]["recovery"]["status"], "resumable")
+            self.assertEqual(payload["status"]["recovery"]["checkpoint"]["phase"], "executor_dispatched")
             self.assertFalse(payload["status"]["can_report_completion"])
 
     def test_record_codex_result_requires_dispatch_first(self) -> None:

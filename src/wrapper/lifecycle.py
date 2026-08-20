@@ -23,7 +23,7 @@ from ..runtime.artifacts import (
     write_delegation,
     write_wrapper_contract,
 )
-from ..runtime.checkpoints import save_checkpoint
+from ..runtime.checkpoints import resume_checkpoint, save_checkpoint
 from ..runtime.records import OBSERVED_RESULTS
 
 
@@ -105,17 +105,18 @@ def start_codex_delegation_lifecycle(
         run_dir,
         coding_delegation_record_payload(payload, message, source_metadata=source_metadata),
     )
-    status = report_codex_delegation_lifecycle(paths, str(run["run_id"]))
+    status_before = report_codex_delegation_lifecycle(paths, str(run["run_id"]))
     _checkpoint_lifecycle(
         paths,
         str(run["run_id"]),
         phase="handoff_prepared",
-        next_action=str(status.get("next_action", "dispatch_to_executor")),
+        next_action=str(status_before.get("next_action", "dispatch_to_executor")),
         state={
             "workflow": str(delegation["recommended_workflow"]),
             "harness": str(delegation["recommended_harness"]),
         },
     )
+    status = report_codex_delegation_lifecycle(paths, str(run["run_id"]))
     result: dict[str, object] = {
         "schema_version": LIFECYCLE_SCHEMA_VERSION,
         "run": run,
@@ -150,14 +151,15 @@ def record_codex_dispatch(paths: OmhPaths, run_id: str) -> dict[str, object]:
         event_type="executor_dispatched",
         summary="Codex dispatch was observed; no executor result is recorded yet.",
     )
-    lifecycle_status = report_codex_delegation_lifecycle(paths, run_id)
+    status_before = report_codex_delegation_lifecycle(paths, run_id)
     _checkpoint_lifecycle(
         paths,
         run_id,
         phase="executor_dispatched",
-        next_action=str(lifecycle_status.get("next_action", "wait_for_executor_evidence")),
+        next_action=str(status_before.get("next_action", "wait_for_executor_evidence")),
         state={"event": "executor_dispatched"},
     )
+    lifecycle_status = report_codex_delegation_lifecycle(paths, run_id)
     return {
         "schema_version": LIFECYCLE_SCHEMA_VERSION,
         "wrapper": wrapper,
@@ -196,15 +198,16 @@ def record_codex_result(
         summary=f"Codex result was recorded as {result}.",
         evidence_refs=list(evidence_refs or []),
     )
-    lifecycle_status = report_codex_delegation_lifecycle(paths, run_id)
+    status_before = report_codex_delegation_lifecycle(paths, run_id)
     _checkpoint_lifecycle(
         paths,
         run_id,
         phase="executor_result",
-        next_action=str(lifecycle_status.get("next_action", "record_verification_evidence")),
+        next_action=str(status_before.get("next_action", "record_verification_evidence")),
         state={"result": result},
         status="blocked" if result in {"blocked", "failed"} else "ready",
     )
+    lifecycle_status = report_codex_delegation_lifecycle(paths, run_id)
     return {
         "schema_version": LIFECYCLE_SCHEMA_VERSION,
         "delegation": delegation,
@@ -238,14 +241,15 @@ def record_codex_verification(
             "unobserved_gaps": unobserved_gaps,
         },
     )
-    lifecycle_status = report_codex_delegation_lifecycle(paths, run_id)
+    status_before = report_codex_delegation_lifecycle(paths, run_id)
     _checkpoint_lifecycle(
         paths,
         run_id,
         phase="verification",
-        next_action=str(lifecycle_status.get("next_action", "report_completion_with_evidence")),
+        next_action=str(status_before.get("next_action", "report_completion_with_evidence")),
         state={"completion_status": completion_status, "gap_count": len(unobserved_gaps)},
     )
+    lifecycle_status = report_codex_delegation_lifecycle(paths, run_id)
     return {
         "schema_version": LIFECYCLE_SCHEMA_VERSION,
         "wrapper": wrapper,
@@ -269,6 +273,7 @@ def report_codex_delegation_lifecycle(paths: OmhPaths, run_id: str) -> dict[str,
             "blocking_reason": "" if next_action in terminal_report_actions else _blocking_reason(next_action),
             "artifact_paths": _artifact_paths(paths, run_id),
             "runtime_validation": validate_runtime(paths, run_id),
+            "recovery": resume_checkpoint(paths.runtime_runs_dir / run_id),
             "executor_progress": _run_progress_status(paths, run_id),
             "progress_reporting_policy": build_coding_progress_reporting_policy(
                 next_action=next_action,
@@ -436,4 +441,5 @@ def _artifact_paths(paths: OmhPaths, run_id: str) -> dict[str, str]:
         "review": str(run_dir / "review.json"),
         "ci": str(run_dir / "ci.json"),
         "merge": str(run_dir / "merge.json"),
+        "checkpoint": str(run_dir / "checkpoint.json"),
     }

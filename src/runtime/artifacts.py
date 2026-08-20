@@ -101,6 +101,7 @@ from .records import (
     validate_wrapper_record,
     validate_wrapper_session_record,
 )
+from .checkpoints import resume_checkpoint
 
 
 # Run history only ever grows, so an unbounded `show_run` makes every repeated
@@ -743,6 +744,7 @@ def show_run(
         "review": read_json_object(run_dir / "review.json"),
         "ci": read_json_object(run_dir / "ci.json"),
         "merge": read_json_object(run_dir / "merge.json"),
+        "recovery": resume_checkpoint(run_dir),
         "evidence": sorted(path.name for path in evidence_dir.iterdir()) if evidence_dir.exists() else [],
     }
     if event_errors:
