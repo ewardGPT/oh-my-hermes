@@ -53,6 +53,13 @@ class ReliabilityCliTests(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertEqual(json.loads(stdout)["status"], "passed")
 
+    def test_recovery_self_test_runs_isolated_local_harness(self) -> None:
+        status, stdout, stderr = run_cli(["reliability", "recovery", "--self-test"])
+        self.assertEqual((status, stderr), (0, ""))
+        payload = json.loads(stdout)
+        self.assertEqual(payload["mode"], "isolated_self_test")
+        self.assertEqual(payload["evaluation"]["status"], "passed")
+
 
 if __name__ == "__main__":
     unittest.main()

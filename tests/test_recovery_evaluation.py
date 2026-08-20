@@ -10,6 +10,7 @@ load_local_package()
 
 from omh.paths import resolve_paths
 from omh.quality.recovery_evaluation import evaluate_recovery_cases
+from omh.quality.recovery_harness import run_recovery_self_test
 from omh.runtime.artifacts import create_run
 from omh.runtime.checkpoints import CheckpointConflict, record_tool_result, resume_checkpoint, save_checkpoint
 
@@ -73,6 +74,13 @@ def _observed_cases(tmp: str) -> list[dict[str, object]]:
 
 
 class RecoveryEvaluationTests(unittest.TestCase):
+    def test_executable_self_test_exercises_all_recovery_phases(self) -> None:
+        result = run_recovery_self_test()
+        self.assertEqual(result["mode"], "isolated_self_test")
+        self.assertEqual(result["evaluation"]["status"], "passed")
+        self.assertEqual(result["evaluation"]["observed"]["phase_count"], 4)
+        self.assertTrue(all(case["replay_status"] == "replayed" for case in result["cases"]))
+
     def test_real_checkpoint_and_replay_cases_pass(self) -> None:
         with TemporaryDirectory() as tmp:
             result = evaluate_recovery_cases(_observed_cases(tmp))

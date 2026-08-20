@@ -10,6 +10,7 @@ from typing import Any
 from ..installer import OmhError
 from ..quality.trajectory_evaluation import evaluate_trajectory
 from ..quality.recovery_evaluation import evaluate_recovery_cases
+from ..quality.recovery_harness import run_recovery_self_test
 from ..runtime.agent_slos import project_agent_slos
 from .common import _print_json
 
@@ -47,6 +48,9 @@ def cmd_reliability_slos(args: argparse.Namespace) -> int:
 
 
 def cmd_reliability_recovery(args: argparse.Namespace) -> int:
+    if args.self_test:
+        _print_json(run_recovery_self_test())
+        return 0
     raw = _read_json(args.input)
     if not isinstance(raw, list):
         raise OmhError("recovery input must be a JSON list")
@@ -73,5 +77,7 @@ def _add_reliability_commands(sub: argparse._SubParsersAction[argparse.ArgumentP
     slos.set_defaults(func=cmd_reliability_slos)
 
     recovery = reliability_sub.add_parser("recovery", help="Evaluate crash-recovery and replay-safety case records.")
-    recovery.add_argument("--input", required=True, help="JSON list of normalized recovery case records.")
+    recovery_mode = recovery.add_mutually_exclusive_group(required=True)
+    recovery_mode.add_argument("--input", help="JSON list of normalized recovery case records.")
+    recovery_mode.add_argument("--self-test", action="store_true", help="Run isolated local checkpoint/replay scenarios.")
     recovery.set_defaults(func=cmd_reliability_recovery)
