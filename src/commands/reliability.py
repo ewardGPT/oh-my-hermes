@@ -9,6 +9,7 @@ from typing import Any
 
 from ..installer import OmhError
 from ..quality.trajectory_evaluation import evaluate_trajectory
+from ..quality.recovery_evaluation import evaluate_recovery_cases
 from ..runtime.agent_slos import project_agent_slos
 from .common import _print_json
 
@@ -45,6 +46,18 @@ def cmd_reliability_slos(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reliability_recovery(args: argparse.Namespace) -> int:
+    raw = _read_json(args.input)
+    if not isinstance(raw, list):
+        raise OmhError("recovery input must be a JSON list")
+    try:
+        payload = evaluate_recovery_cases(raw)
+    except ValueError as exc:
+        raise OmhError(str(exc)) from exc
+    _print_json(payload)
+    return 0
+
+
 def _add_reliability_commands(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     reliability = sub.add_parser("reliability", help="Evaluate privacy-safe agent trajectories and reliability SLOs.")
     reliability_sub = reliability.add_subparsers(dest="reliability_command", required=True)
@@ -58,3 +71,7 @@ def _add_reliability_commands(sub: argparse._SubParsersAction[argparse.ArgumentP
     slos.add_argument("--max-latency-ms", type=int, default=60_000)
     slos.add_argument("--max-cost-usd", type=float, default=1.0)
     slos.set_defaults(func=cmd_reliability_slos)
+
+    recovery = reliability_sub.add_parser("recovery", help="Evaluate crash-recovery and replay-safety case records.")
+    recovery.add_argument("--input", required=True, help="JSON list of normalized recovery case records.")
+    recovery.set_defaults(func=cmd_reliability_recovery)
