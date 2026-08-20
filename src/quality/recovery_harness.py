@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import signal
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Callable
 
 from ..paths import resolve_paths
 from ..runtime.artifacts import create_run
@@ -28,6 +31,21 @@ def _crash_worker(omh_home: str, hermes_home: str, run_id: str) -> None:
         idempotency_key="process-crash-checkpoint",
     )
     os._exit(23)
+
+
+def _hung_worker(omh_home: str, hermes_home: str, run_id: str) -> None:
+    """Persist a checkpoint and ignore graceful termination for failure tests."""
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    paths = resolve_paths(Path(omh_home), Path(hermes_home))
+    save_checkpoint(
+        paths.runtime_runs_dir / run_id,
+        phase="executor_dispatched",
+        state={"phase": "executor_dispatched"},
+        next_action="resume_next",
+        idempotency_key="process-crash-checkpoint",
+    )
+    while True:
+        time.sleep(1)
 
 
 def run_recovery_self_test() -> dict[str, object]:
@@ -94,7 +112,12 @@ def run_recovery_self_test() -> dict[str, object]:
     }
 
 
-def run_process_crash_self_test() -> dict[str, object]:
+def run_process_crash_self_test(
+    *,
+    worker_target: Callable[[str, str, str], None] = _crash_worker,
+    timeout_seconds: float = 10,
+    termination_timeout_seconds: float = 2,
+) -> dict[str, object]:
     """Verify checkpoint recovery after a worker process terminates abruptly."""
     with TemporaryDirectory(prefix="omh-process-crash-self-test-") as tmp:
         root = Path(tmp)
@@ -104,17 +127,17 @@ def run_process_crash_self_test() -> dict[str, object]:
         run_dir = paths.runtime_runs_dir / run_id
         context = multiprocessing.get_context("spawn")
         worker = context.Process(
-            target=_crash_worker,
+            target=worker_target,
             args=(str(paths.omh_home), str(paths.hermes_home), run_id),
         )
         worker.start()
-        worker.join(timeout=10)
+        worker.join(timeout=timeout_seconds)
         if worker.is_alive():
             worker.terminate()
-            worker.join(timeout=2)
+            worker.join(timeout=termination_timeout_seconds)
         if worker.is_alive():
             worker.kill()
-            worker.join(timeout=2)
+            worker.join(timeout=termination_timeout_seconds)
 
         worker_exit_code = worker.exitcode
         recovery = resume_checkpoint(run_dir)

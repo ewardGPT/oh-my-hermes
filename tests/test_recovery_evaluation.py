@@ -10,7 +10,7 @@ load_local_package()
 
 from omh.paths import resolve_paths
 from omh.quality.recovery_evaluation import evaluate_recovery_cases
-from omh.quality.recovery_harness import run_process_crash_self_test, run_recovery_self_test
+from omh.quality.recovery_harness import _hung_worker, run_process_crash_self_test, run_recovery_self_test
 from omh.runtime.artifacts import create_run
 from omh.runtime.checkpoints import CheckpointConflict, record_tool_result, resume_checkpoint, save_checkpoint
 
@@ -74,6 +74,16 @@ def _observed_cases(tmp: str) -> list[dict[str, object]]:
 
 
 class RecoveryEvaluationTests(unittest.TestCase):
+    def test_process_crash_self_test_fails_closed_when_worker_ignores_termination(self) -> None:
+        result = run_process_crash_self_test(timeout_seconds=0.2, termination_timeout_seconds=0.2, worker_target=_hung_worker)
+        self.assertEqual(result["mode"], "process_crash_self_test")
+        self.assertEqual(result["status"], "failed")
+        self.assertNotEqual(result["worker_exit_code"], 23)
+        self.assertEqual(result["recovery"]["status"], "resumable")
+        self.assertEqual(result["record_status"], "not_attempted")
+        self.assertEqual(result["replay_status"], "not_attempted")
+        self.assertFalse(result["conflict_refused"])
+
     def test_process_crash_self_test_recovers_from_terminated_worker(self) -> None:
         result = run_process_crash_self_test()
         self.assertEqual(result["mode"], "process_crash_self_test")
