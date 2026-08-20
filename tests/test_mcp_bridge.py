@@ -144,6 +144,8 @@ class McpBridgeTests(unittest.TestCase):
             self.assertEqual(recommend["schema_version"], "omh_mcp_tool_result/v1")
             self.assertEqual(recommend["tool"], "omh_recommend")
             self.assertIn("recommendations", recommend["payload"])
+            self.assertEqual(recommend["tool_policy"]["action"], "allow")
+            self.assertEqual(recommend["tool_policy"]["reason"], "policy_satisfied")
             probe = lines[3]["result"]["structuredContent"]["payload"]["probe"]
             self.assertIn("parity_matrix", probe)
             self.assertIn("capability_gap_roadmap", probe)

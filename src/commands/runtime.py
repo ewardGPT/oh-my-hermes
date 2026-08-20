@@ -86,6 +86,7 @@ from ..runtime.context_budget import (
     unchanged_progress_status_payload,
     unchanged_run_payload,
 )
+from ..runtime.checkpoints import record_tool_result, resume_checkpoint, save_checkpoint
 from ..executors import CODING_RUNTIME_HANDOFF_TARGETS
 from ..local_store import read_json_object
 from ..paths import OmhPaths
@@ -201,6 +202,66 @@ def cmd_runtime_show(args: argparse.Namespace) -> int:
         byte_count=len(json.dumps(payload, sort_keys=True)),
         payload_fingerprint_value=fingerprint,
     )
+    return 0
+
+
+def cmd_runtime_checkpoint(args: argparse.Namespace) -> int:
+    paths = _paths(args)
+    run_dir = paths.runtime_runs_dir / args.run_id
+    if not (run_dir / "run.json").exists():
+        raise OmhError(f"runtime run not found: {args.run_id}")
+    try:
+        state = json.loads(args.state_json)
+    except json.JSONDecodeError as exc:
+        raise OmhError(f"--state-json must be valid JSON: {exc}") from exc
+    if not isinstance(state, dict):
+        raise OmhError("--state-json must contain a JSON object")
+    try:
+        checkpoint = save_checkpoint(
+            run_dir,
+            phase=args.phase,
+            state=state,
+            next_action=args.next_action,
+            idempotency_key=args.idempotency_key,
+            status=args.status,
+        )
+    except ValueError as exc:
+        raise OmhError(str(exc)) from exc
+    _print_json({"checkpoint": checkpoint})
+    return 0
+
+
+def cmd_runtime_resume(args: argparse.Namespace) -> int:
+    paths = _paths(args)
+    run_dir = paths.runtime_runs_dir / args.run_id
+    if not (run_dir / "run.json").exists():
+        raise OmhError(f"runtime run not found: {args.run_id}")
+    _print_json(resume_checkpoint(run_dir))
+    return 0
+
+
+def cmd_runtime_tool_result(args: argparse.Namespace) -> int:
+    paths = _paths(args)
+    run_dir = paths.runtime_runs_dir / args.run_id
+    if not (run_dir / "run.json").exists():
+        raise OmhError(f"runtime run not found: {args.run_id}")
+    try:
+        result = json.loads(args.result_json)
+    except json.JSONDecodeError as exc:
+        raise OmhError(f"--result-json must be valid JSON: {exc}") from exc
+    if not isinstance(result, dict):
+        raise OmhError("--result-json must contain a JSON object")
+    try:
+        replay = record_tool_result(
+            run_dir,
+            idempotency_key=args.idempotency_key,
+            tool_name=args.tool,
+            arguments_digest=args.arguments_digest,
+            result=result,
+        )
+    except ValueError as exc:
+        raise OmhError(str(exc)) from exc
+    _print_json({"tool_result": replay})
     return 0
 
 
@@ -1262,6 +1323,36 @@ def _add_runtime_commands(sub) -> None:
         help="Emit the full run history and bypass the observe-context budget. Expensive for agent context.",
     )
     runtime_show.set_defaults(func=cmd_runtime_show)
+
+    runtime_checkpoint = runtime_sub.add_parser(
+        "checkpoint",
+        help="Atomically persist metadata-only resumable state for a runtime run.",
+    )
+    runtime_checkpoint.add_argument("--run", dest="run_id", required=True)
+    runtime_checkpoint.add_argument("--phase", required=True)
+    runtime_checkpoint.add_argument("--next-action", required=True)
+    runtime_checkpoint.add_argument("--state-json", required=True, help="JSON object containing replay-safe state only.")
+    runtime_checkpoint.add_argument("--idempotency-key", required=True)
+    runtime_checkpoint.add_argument("--status", choices=("ready", "completed", "blocked"), default="ready")
+    runtime_checkpoint.set_defaults(func=cmd_runtime_checkpoint)
+
+    runtime_resume = runtime_sub.add_parser(
+        "resume",
+        help="Inspect the last atomically persisted checkpoint for a runtime run.",
+    )
+    runtime_resume.add_argument("--run", dest="run_id", required=True)
+    runtime_resume.set_defaults(func=cmd_runtime_resume)
+
+    runtime_tool_result = runtime_sub.add_parser(
+        "tool-result",
+        help="Record or safely replay one idempotent tool result for a runtime run.",
+    )
+    runtime_tool_result.add_argument("--run", dest="run_id", required=True)
+    runtime_tool_result.add_argument("--tool", required=True)
+    runtime_tool_result.add_argument("--arguments-digest", required=True)
+    runtime_tool_result.add_argument("--idempotency-key", required=True)
+    runtime_tool_result.add_argument("--result-json", required=True, help="JSON object returned by the tool.")
+    runtime_tool_result.set_defaults(func=cmd_runtime_tool_result)
 
     runtime_delegation_status = runtime_sub.add_parser("delegation-status")
     runtime_delegation_status.add_argument("--run", dest="run_id", required=True)

@@ -49,6 +49,8 @@ class RunContextBudgetTests(unittest.TestCase):
             self.assertEqual(budget["emitted_bytes"], 0)
             self.assertEqual(budget["remaining_bytes"], RUN_CONTEXT_BUDGET_BYTES)
             self.assertEqual(budget["observe_call_count"], 0)
+            self.assertEqual(budget["governance"]["status"], "allow")
+            self.assertGreater(budget["governance"]["available_payload_tokens"], 0)
 
     def test_emissions_accumulate_per_run_and_per_surface(self) -> None:
         with TemporaryDirectory() as tmp:

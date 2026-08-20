@@ -331,6 +331,7 @@ class RuntimeArtifactTests(unittest.TestCase):
             self.assertEqual(json.loads(paths.runtime_state_path.read_text(encoding="utf-8"))["last_run_id"], run["run_id"])
             self.assertEqual(list_runs(paths)[0]["run_id"], run["run_id"])
             self.assertEqual(validate_run_record(run), [])
+            self.assertEqual(show_run(paths, run["run_id"])["recovery"]["status"], "no_checkpoint")
 
     def test_create_prepared_coding_delegation_run_has_explicit_boundary(self) -> None:
         with TemporaryDirectory() as tmp:

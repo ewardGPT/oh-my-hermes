@@ -12,6 +12,7 @@ from ..paths import OmhPaths
 from ..probe import probe_capabilities
 from ..routing.recommend import recommend_skills
 from ..runtime.artifacts import update_state
+from ..runtime.tool_policy import build_tool_policy, decide_tool_call
 
 MCP_PROTOCOL_VERSION = "2025-06-18"
 MCP_BRIDGE_SCHEMA_VERSION = "omh_mcp_bridge/v1"
@@ -37,6 +38,11 @@ _MCP_HOST_CONFIG_RECIPE_ALIASES = {
     "open_code": "opencode",
     "open code": "opencode",
     "cursor": "cursor",
+}
+_MCP_TOOL_POLICIES = {
+    "omh_status": build_tool_policy("omh_status", capability="read_status", side_effect="read"),
+    "omh_recommend": build_tool_policy("omh_recommend", capability="recommend_workflow", side_effect="read"),
+    "omh_probe": build_tool_policy("omh_probe", capability="probe_capabilities", side_effect="read"),
 }
 
 MCP_BRIDGE_CLAIM_BOUNDARY = (
@@ -500,12 +506,15 @@ def _call_tool(paths: OmhPaths, name: str, arguments: dict[str, Any]) -> dict[st
 
 
 def _tool_result(result_schema_version: str, tool: str, payload: dict[str, Any]) -> dict[str, Any]:
+    policy = _MCP_TOOL_POLICIES.get(tool)
+    decision = decide_tool_call(policy, budget_remaining=1) if policy is not None else None
     return {
         "schema_version": MCP_TOOL_RESULT_SCHEMA_VERSION,
         "result_schema_version": result_schema_version,
         "tool": tool,
         "status": "observed_tool_call",
         "payload": payload,
+        "tool_policy": decision,
         "claim_boundary": MCP_BRIDGE_CLAIM_BOUNDARY,
     }
 

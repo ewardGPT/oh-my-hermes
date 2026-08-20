@@ -48,7 +48,7 @@ def cmd_quality_evidence_assess(args: argparse.Namespace) -> int:
     except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
         raise OmhError(str(exc)) from exc
     _print_json(assessment)
-    return 0
+    return 0 if not args.require_ready or assessment.get("ready_for_completion") is True else 1
 
 
 def cmd_quality_evidence_language_diagnostics(args: argparse.Namespace) -> int:
@@ -146,6 +146,11 @@ def _add_quality_evidence_commands(sub: argparse._SubParsersAction[argparse.Argu
     assess.add_argument("--package", required=True, help="Path to a prepared quality evidence package JSON.")
     assess.add_argument("--observations-json", "--observations", dest="observations_json", help="Inline observations JSON.")
     assess.add_argument("--observations-file", help="Path to observations JSON.")
+    assess.add_argument(
+        "--require-ready",
+        action="store_true",
+        help="Return non-zero unless the assessment has ready_for_completion=true.",
+    )
     assess.set_defaults(func=cmd_quality_evidence_assess)
 
     language = commands.add_parser(

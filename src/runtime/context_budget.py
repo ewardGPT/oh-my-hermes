@@ -21,6 +21,7 @@ from typing import Any
 from ..context_safety import RUN_CONTEXT_BUDGET_BYTES
 from ..local_store import ensure_dir, locked_json_update, read_json_object, utc_now
 from ..paths import OmhPaths
+from .context_governor import govern_context
 
 
 RUN_CONTEXT_BUDGET_SCHEMA_VERSION = "omh_run_context_budget/v1"
@@ -150,6 +151,14 @@ def run_context_budget(paths: OmhPaths, run_id: str, *, surface: str = "") -> di
     entry = _entry(_ledger(paths), run_id)
     emitted = entry["emitted_bytes"]
     exhausted = emitted >= RUN_CONTEXT_BUDGET_BYTES
+    token_budget = max(1, RUN_CONTEXT_BUDGET_BYTES // 4)
+    governance = govern_context(
+        total_budget=token_budget,
+        system_tokens=0,
+        handoff_reserve=max(1, token_budget // 5),
+        memory_tokens=0,
+        tool_result_tokens=emitted // 4,
+    )
     return {
         "schema_version": RUN_CONTEXT_BUDGET_SCHEMA_VERSION,
         "run_id": run_id,
@@ -163,6 +172,7 @@ def run_context_budget(paths: OmhPaths, run_id: str, *, surface: str = "") -> di
         "exhausted": exhausted,
         "enforcement": "degrade_to_summary_only_with_artifact_pointers",
         "policy": "timed_polling_rejected; raw_log_dumping_rejected",
+        "governance": governance,
     }
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import unittest
 
@@ -66,6 +67,7 @@ class RoutingObservationSchemaTests(unittest.TestCase):
         self.assertEqual(payload["parent_session_id"], "parent-1")
         self.assertEqual(payload["child_session_id"], "child-1")
         self.assertEqual(payload["run_id"], "run-1")
+        self.assertEqual(payload["correlation_id"], "corr-" + hashlib.sha256(b"parent-1").hexdigest()[:32])
         self.assertEqual(payload["category"], "deep")
         self.assertEqual(payload["lane"], "coding")
         self.assertEqual(payload["role"], "implementation")
@@ -76,6 +78,14 @@ class RoutingObservationSchemaTests(unittest.TestCase):
         for field in ("turn", "tools", "elapsed_seconds", "tokens", "cost_usd", "rate_tokens_per_second"):
             self.assertIsNone(payload[field], field)
         self.assertIsNone(payload["current_action"])
+
+    def test_correlation_id_is_stable_and_does_not_expose_session_identity(self) -> None:
+        first = build_routing_observation(route=self._route(), run_id="run-1")
+        second = build_routing_observation(route=self._route(), run_id="run-1")
+
+        self.assertEqual(first["correlation_id"], second["correlation_id"])
+        self.assertTrue(str(first["correlation_id"]).startswith("corr-"))
+        self.assertNotIn("run-1", str(first["correlation_id"]))
 
     def test_fallback_chain_and_observed_index_follow_runtime_selection(self) -> None:
         payload = build_routing_observation(
