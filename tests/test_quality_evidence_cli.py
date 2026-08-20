@@ -72,6 +72,24 @@ class QualityEvidenceCliTests(unittest.TestCase):
         self.assertEqual(assessment["dimensions"]["scenario_coverage"]["status"], "unknown")
         self.assertIn("does not prove external execution", assessment["claim_boundary"])
 
+    def test_assess_require_ready_returns_nonzero_for_incomplete_evidence(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            package = root / "package.json"
+            package.write_text(json.dumps({
+                "schema_version": "quality_evidence_package/v1", "status": "prepared_not_observed",
+                "subject": {"title": "gate", "executor_target": "codex", "source": {"repository_id": "r", "commit_sha": "c", "tree_sha": "t"}},
+                "qa_scenarios": [{"id": "qa-1"}], "review_requirements": [],
+                "claim_requirements": [], "self_critique_questions": [],
+                "claim_boundary": "Prepared requirements are not observed execution evidence.",
+            }), encoding="utf-8")
+            status, stdout, stderr = run_cli([
+                "quality-evidence", "assess", "--package", str(package), "--observations", "[]", "--require-ready",
+            ])
+        self.assertNotEqual(status, 0)
+        self.assertEqual(stderr, "")
+        self.assertFalse(json.loads(stdout)["ready_for_completion"])
+
     def test_catalog_quality_evidence_loop_preserves_boundary(self) -> None:
         definition = next(item for item in builtin_definitions() if item.name == "quality-evidence-loop")
         text = " ".join((*definition.safety_rules, *definition.quality_bar, *definition.final_checklist))
