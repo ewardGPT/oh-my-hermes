@@ -4,11 +4,15 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from argparse import Namespace
+from unittest.mock import patch
 
 from _cli_harness import run_cli
 from _local_package import load_local_package
 
 load_local_package()
+
+from omh.commands.reliability import cmd_reliability_recovery
 
 
 class ReliabilityCliTests(unittest.TestCase):
@@ -66,6 +70,16 @@ class ReliabilityCliTests(unittest.TestCase):
         payload = json.loads(stdout)
         self.assertEqual(payload["mode"], "process_crash_self_test")
         self.assertEqual(payload["status"], "passed")
+
+    def test_recovery_process_crash_mode_returns_nonzero_on_failed_self_test(self) -> None:
+        failed = {
+            "mode": "process_crash_self_test",
+            "status": "failed",
+            "claim_boundary": "test",
+        }
+        with patch("omh.commands.reliability.run_process_crash_self_test", return_value=failed):
+            status = cmd_reliability_recovery(Namespace(process_crash=True, self_test=False, input=None))
+        self.assertEqual(status, 1)
 
 
 if __name__ == "__main__":

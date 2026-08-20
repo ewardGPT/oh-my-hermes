@@ -49,11 +49,13 @@ def cmd_reliability_slos(args: argparse.Namespace) -> int:
 
 def cmd_reliability_recovery(args: argparse.Namespace) -> int:
     if args.process_crash:
-        _print_json(run_process_crash_self_test())
-        return 0
+        payload = run_process_crash_self_test()
+        _print_json(payload)
+        return 0 if payload.get("status") == "passed" else 1
     if args.self_test:
-        _print_json(run_recovery_self_test())
-        return 0
+        payload = run_recovery_self_test()
+        _print_json(payload)
+        return 0 if payload.get("evaluation", {}).get("status") == "passed" else 1
     raw = _read_json(args.input)
     if not isinstance(raw, list):
         raise OmhError("recovery input must be a JSON list")

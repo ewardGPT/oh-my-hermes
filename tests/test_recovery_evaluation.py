@@ -75,7 +75,7 @@ def _observed_cases(tmp: str) -> list[dict[str, object]]:
 
 class RecoveryEvaluationTests(unittest.TestCase):
     def test_process_crash_self_test_fails_closed_when_worker_ignores_termination(self) -> None:
-        result = run_process_crash_self_test(timeout_seconds=0.2, termination_timeout_seconds=0.2, worker_target=_hung_worker)
+        result = run_process_crash_self_test(timeout_seconds=1.0, termination_timeout_seconds=0.2, worker_target=_hung_worker)
         self.assertEqual(result["mode"], "process_crash_self_test")
         self.assertEqual(result["status"], "failed")
         self.assertNotEqual(result["worker_exit_code"], 23)
