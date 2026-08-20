@@ -140,6 +140,7 @@ def run_process_crash_self_test(
             worker.join(timeout=termination_timeout_seconds)
 
         worker_exit_code = worker.exitcode
+        worker_cleanup = "clean" if not worker.is_alive() else "leaked"
         recovery = resume_checkpoint(run_dir)
         replay_status = "not_attempted"
         conflict_refused = False
@@ -177,6 +178,7 @@ def run_process_crash_self_test(
             and recovery.get("status") == "resumable"
             and isinstance(recovery.get("checkpoint"), dict)
             and recovery["checkpoint"].get("phase") == "executor_dispatched"
+            and worker_cleanup == "clean"
             and record_status == "recorded"
             and replay_status == "replayed"
             and conflict_refused
@@ -186,6 +188,7 @@ def run_process_crash_self_test(
         "mode": "process_crash_self_test",
         "status": "passed" if passed else "failed",
         "worker_exit_code": worker_exit_code,
+        "worker_cleanup": worker_cleanup,
         "recovery": recovery,
         "record_status": record_status,
         "replay_status": replay_status,
