@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import multiprocessing
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -12,6 +14,20 @@ from .recovery_evaluation import RECOVERY_PHASES, evaluate_recovery_cases
 
 
 RECOVERY_HARNESS_SCHEMA_VERSION = "recovery_harness/v1"
+
+
+def _crash_worker(omh_home: str, hermes_home: str, run_id: str) -> None:
+    """Persist a dispatch checkpoint, then simulate an abrupt worker death."""
+    paths = resolve_paths(Path(omh_home), Path(hermes_home))
+    run_dir = paths.runtime_runs_dir / run_id
+    save_checkpoint(
+        run_dir,
+        phase="executor_dispatched",
+        state={"phase": "executor_dispatched"},
+        next_action="resume_next",
+        idempotency_key="process-crash-checkpoint",
+    )
+    os._exit(23)
 
 
 def run_recovery_self_test() -> dict[str, object]:
@@ -75,4 +91,81 @@ def run_recovery_self_test() -> dict[str, object]:
         "cases": cases,
         "evaluation": evaluation,
         "claim_boundary": "This self-test exercises OMH local checkpoint and replay contracts only; it does not invoke external tools, providers, executors, or production state.",
+    }
+
+
+def run_process_crash_self_test() -> dict[str, object]:
+    """Verify checkpoint recovery after a worker process terminates abruptly."""
+    with TemporaryDirectory(prefix="omh-process-crash-self-test-") as tmp:
+        root = Path(tmp)
+        paths = resolve_paths(root / ".omh", root / ".hermes")
+        run = create_run(paths, {"skill": "plan", "harness": "process-crash", "status": "started"})
+        run_id = str(run["run_id"])
+        run_dir = paths.runtime_runs_dir / run_id
+        context = multiprocessing.get_context("spawn")
+        worker = context.Process(
+            target=_crash_worker,
+            args=(str(paths.omh_home), str(paths.hermes_home), run_id),
+        )
+        worker.start()
+        worker.join(timeout=10)
+        if worker.is_alive():
+            worker.terminate()
+            worker.join(timeout=2)
+        if worker.is_alive():
+            worker.kill()
+            worker.join(timeout=2)
+
+        worker_exit_code = worker.exitcode
+        recovery = resume_checkpoint(run_dir)
+        replay_status = "not_attempted"
+        conflict_refused = False
+        record_status = "not_attempted"
+        if worker_exit_code == 23 and recovery.get("status") == "resumable":
+            recorded = record_tool_result(
+                run_dir,
+                idempotency_key="process-crash-tool",
+                tool_name="read_status",
+                arguments_digest="process-crash-args",
+                result={"recovered": True},
+            )
+            record_status = str(recorded.get("status"))
+            replayed = record_tool_result(
+                run_dir,
+                idempotency_key="process-crash-tool",
+                tool_name="read_status",
+                arguments_digest="process-crash-args",
+                result={"recovered": False},
+            )
+            replay_status = str(replayed.get("status"))
+            try:
+                record_tool_result(
+                    run_dir,
+                    idempotency_key="process-crash-tool",
+                    tool_name="read_status",
+                    arguments_digest="different-process-crash-args",
+                    result={"recovered": True},
+                )
+            except CheckpointConflict:
+                conflict_refused = True
+
+        passed = (
+            worker_exit_code == 23
+            and recovery.get("status") == "resumable"
+            and isinstance(recovery.get("checkpoint"), dict)
+            and recovery["checkpoint"].get("phase") == "executor_dispatched"
+            and record_status == "recorded"
+            and replay_status == "replayed"
+            and conflict_refused
+        )
+    return {
+        "schema_version": RECOVERY_HARNESS_SCHEMA_VERSION,
+        "mode": "process_crash_self_test",
+        "status": "passed" if passed else "failed",
+        "worker_exit_code": worker_exit_code,
+        "recovery": recovery,
+        "record_status": record_status,
+        "replay_status": replay_status,
+        "conflict_refused": conflict_refused,
+        "claim_boundary": "This self-test proves local checkpoint persistence and replay behavior across an abruptly terminated worker process; it does not prove external tool side effects are transactional or recoverable.",
     }

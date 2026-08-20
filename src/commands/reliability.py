@@ -10,7 +10,7 @@ from typing import Any
 from ..installer import OmhError
 from ..quality.trajectory_evaluation import evaluate_trajectory
 from ..quality.recovery_evaluation import evaluate_recovery_cases
-from ..quality.recovery_harness import run_recovery_self_test
+from ..quality.recovery_harness import run_process_crash_self_test, run_recovery_self_test
 from ..runtime.agent_slos import project_agent_slos
 from .common import _print_json
 
@@ -48,6 +48,9 @@ def cmd_reliability_slos(args: argparse.Namespace) -> int:
 
 
 def cmd_reliability_recovery(args: argparse.Namespace) -> int:
+    if args.process_crash:
+        _print_json(run_process_crash_self_test())
+        return 0
     if args.self_test:
         _print_json(run_recovery_self_test())
         return 0
@@ -80,4 +83,5 @@ def _add_reliability_commands(sub: argparse._SubParsersAction[argparse.ArgumentP
     recovery_mode = recovery.add_mutually_exclusive_group(required=True)
     recovery_mode.add_argument("--input", help="JSON list of normalized recovery case records.")
     recovery_mode.add_argument("--self-test", action="store_true", help="Run isolated local checkpoint/replay scenarios.")
+    recovery_mode.add_argument("--process-crash", action="store_true", help="Terminate a worker after checkpointing, then verify restart recovery from disk.")
     recovery.set_defaults(func=cmd_reliability_recovery)

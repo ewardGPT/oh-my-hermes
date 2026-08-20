@@ -60,6 +60,13 @@ class ReliabilityCliTests(unittest.TestCase):
         self.assertEqual(payload["mode"], "isolated_self_test")
         self.assertEqual(payload["evaluation"]["status"], "passed")
 
+    def test_recovery_process_crash_mode_restarts_from_disk(self) -> None:
+        status, stdout, stderr = run_cli(["reliability", "recovery", "--process-crash"])
+        self.assertEqual((status, stderr), (0, ""))
+        payload = json.loads(stdout)
+        self.assertEqual(payload["mode"], "process_crash_self_test")
+        self.assertEqual(payload["status"], "passed")
+
 
 if __name__ == "__main__":
     unittest.main()
